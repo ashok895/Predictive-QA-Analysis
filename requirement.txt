@@ -1,6 +1,12 @@
 streamlit
+pydantic
 pandas
 faiss-cpu
-pydantic
+tensorflow
 tensorflow-hub
-vertexai
+google-cloud-aiplatform
+google-cloud-core
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
