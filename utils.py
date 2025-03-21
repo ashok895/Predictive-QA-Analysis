@@ -20,7 +20,7 @@ def get_data_embeddings(data):
 @st.cache_resource
 def initialize_vertex_ai():
     kwargs = init_and_get_env_vars(override_vars=True)
-    google_cloud_project = kwargs['google_cloud_project']
+    google_cloud_project = kwargs["google_cloud_project"]
     google_cloud_location = kwargs["google_cloud_location"]
     vertexai.init(project=google_cloud_project, location=google_cloud_location)
     return kwargs["model_name"]

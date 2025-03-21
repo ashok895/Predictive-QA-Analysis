@@ -3,17 +3,18 @@ import time
 import streamlit as st
 from vertexai.generative_models import GenerativeModel, GenerationConfig
 from utils import initialize_vertex_ai
-from data_processing import retrieve_relevant_data
+from embedding_agent import EmbeddingAgent
+from retrieval_agent import RetrievalAgent
 from pydantic import BaseModel, ValidationError
 
-# Define the agent for defect analysis
+# Define the master agent for defect analysis
 agent_instruction_prompt = """
     You are an expert in analyzing historical defect data and predicting future defect occurrences.
     Use the following context and input to predict potential future defects, identify trends, and provide insights
     on when the next defect spike might occur.
 
     Context:
-    The defect data comes from 4 different areas: Jira, System log, Metrics, and Code. Answer the questions in regard to each individual sheet, and in general for all sheets weather they have correlation or not.
+    The defect data comes from 4 different areas: Jira, System log, Metrics, and Code. Answer the questions in regard to each individual sheet, and in general for all sheets whether they have correlation or not.
 
     Question:
     Based on the historical defect data, can you predict the likelihood of a future spike in defects?
@@ -37,16 +38,32 @@ class Agent:
         self.instruction = instruction
         self.generate_content_config = generate_content_config
         self.model = GenerativeModel(model)
+        self.embedding_agent = EmbeddingAgent(name="embedding_agent")
+        self.retrieval_agent = RetrievalAgent(name="retrieval_agent")
 
     def run(self, query):
-        final_prompt = self.instruction + "\n" + query
+        # Retrieve relevant data
+        relevant_data = self.retrieval_agent.retrieve_data(query)
+        if relevant_data is None or len(relevant_data) == 0:
+            return "Error retrieving relevant data."
+
+        # Generate embeddings
+        embeddings = self.embedding_agent.generate_embeddings(relevant_data)
+        if embeddings is None or embeddings.size == 0:
+            return "Error generating embeddings."
+
+        # Generate final prompt
+        context = "\n".join(relevant_data)
+        final_prompt = self.instruction + "\n" + context + "\n" + query
+
+        # Get response from LLM
         response = self.model.generate_content(
             final_prompt,
             generation_config=self.generate_content_config
         )
         return response
 
-# Initialize the agent
+# Initialize the master agent
 @st.cache_resource
 def create_agent():
     try:
@@ -95,47 +112,16 @@ def run_analysis():
         logging.error(f"Validation error: {e}")
         return
 
-    relevant_data = retrieve_relevant_data(user_query)
-
-    def generate_defect_analysis_prompt(retrieved_data):
-        context = "\n".join(relevant_data)
-        prompt_template = f"""
-        You are an expert in analyzing historical defect data and predicting future defect occurrences.
-        Use the following context and input to predict potential future defects, identify trends, and provide insights
-        on when the next defect spike might occur.
-
-        Context:
-        The defect data comes from 4 different areas: Jira, System log, Metrics, and Code. Answer the questions in regard to each individual sheet, and in general for all sheets weather they have correlation or not.
-
-        Question:
-        Based on the historical defect data, can you predict the likelihood of a future spike in defects?
-
-        Requirements:
-        - Analyze the defect occurrence patterns and trends.
-        - Predict when the next defect might occur, considering factors like severity, priority, and defect category.
-        - Identify any correlation between defect occurrences in each sheet.
-        - Predict the potential spikes in defects based on historical data, with a focus on defects occurring over the next few months.
-
-        Expected Output:
-        - A detailed analysis of defect trends, predictions for future defect occurrences, and insights into any correlation between defects and code/system changes.
-        - Suggestions for potential causes for future defects based on historical patterns and system changes.
-        """
-        return prompt_template + context
-
-    final_prompt = generate_defect_analysis_prompt(relevant_data)
-
     if agent_defect_analysis:
         start_time = time.time()
         try:
-            response = agent_defect_analysis.run(final_prompt)
+            response = agent_defect_analysis.run(user_query)
             final_response = response.text
             end_time = time.time()
             elapsed_time_ms = round((end_time - start_time) * 1000, 3)
 
             logging.info(f'Agent generated response in {elapsed_time_ms} ms')
             st.success(f"Predictive Analysis from LLM ({elapsed_time_ms} ms):\n{final_response}")
-
-
 
         except Exception as e:
             error_message = f"Error: {str(e)}"
@@ -150,39 +136,10 @@ def get_llm_response(user_message):
     except ValidationError as e:
         return f"Validation error: {e}"
 
-    relevant_data = retrieve_relevant_data(user_message)
-
-    def generate_defect_analysis_prompt(retrieved_data):
-        context = "\n".join(retrieved_data)
-        prompt_template = f"""
-        You are an expert in analyzing historical defect data and predicting future defect occurrences
-        Use the following context and input to predict potential future defects, identify trends, and provide insights
-        on when the next defect spike might occur.
-
-        Context:
-        The defect data comes from 4 different areas: Jira, System log, Metrics, and Code. Answer the questions in regard to each individual sheet, and in general for all sheets weather they have correlation or not.
-
-        Question:
-        Based on the historical defect data, can you predict the likelihood of a future spike in defects?
-
-        Requirements:
-        - Analyze the defect occurrence patterns and trends.
-        - Predict when the next defect might occur, considering factors like severity, priority, and defect category.
-        - Identify any correlation between defect occurrences in each sheet.
-        - Predict the potential spikes in defects based on historical data, with a focus on defects occurring over the next few months.
-
-        Expected Output:
-        - A detailed analysis of defect trends, predictions for future defect occurrences, and insights into any correlation between defects and code/system changes.
-        - Suggestions for potential causes for future defects based on historical patterns and system changes.
-        """
-        return prompt_template + context
-
-    final_prompt = generate_defect_analysis_prompt(relevant_data)
-
     if agent_defect_analysis:
         start_time = time.time()
         try:
-            response = agent_defect_analysis.run(final_prompt)
+            response = agent_defect_analysis.run(user_message)
             final_response = response.text
             end_time = time.time()
             elapsed_time_ms = round((end_time - start_time) * 1000, 3)
