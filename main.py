@@ -4,7 +4,6 @@ from data_processing import process_excel_data, retrieve_relevant_data
 from agent import create_agent, run_analysis, get_llm_response
 from pydantic import BaseModel, ValidationError
 
-
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -34,12 +33,3 @@ if st.button("Run Predictive Analysis"):
         st.warning("Please upload an Excel file first.")
 
 # Chat interface
-user_message = st.text_input("Enter your message:")
-
-if user_message:
-    try:
-        UserQuery(query=user_message)
-        llm_response = get_llm_response(user_message)
-        st.write(f"LLM: {llm_response}")
-    except ValidationError as e:
-        st.error(f"Validation error: {e}")

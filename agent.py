@@ -3,7 +3,7 @@ import time
 import streamlit as st
 from vertexai.generative_models import GenerativeModel, GenerationConfig
 from utils import initialize_vertex_ai
-from embedding_agent import EmbeddingAgent
+from embedding_agent import embedding_agent
 from retrieval_agent import RetrievalAgent
 from pydantic import BaseModel, ValidationError
 
@@ -31,24 +31,23 @@ agent_instruction_prompt = """
     """
 
 class Agent:
-    def __init__(self, model, name, description, instruction, generate_content_config):
+    def __init__(self, model, name, description, instruction, generate_content_config, children):
         self.model_name = model
         self.name = name
         self.description = description
         self.instruction = instruction
         self.generate_content_config = generate_content_config
         self.model = GenerativeModel(model)
-        self.embedding_agent = EmbeddingAgent(name="embedding_agent")
-        self.retrieval_agent = RetrievalAgent(name="retrieval_agent")
+        self.children = children
 
     def run(self, query):
         # Retrieve relevant data
-        relevant_data = self.retrieval_agent.retrieve_data(query)
+        relevant_data = self.children['retrieval_agent'].retrieve_data(query)
         if relevant_data is None or len(relevant_data) == 0:
             return "Error retrieving relevant data."
 
         # Generate embeddings
-        embeddings = self.embedding_agent.generate_embeddings(relevant_data)
+        embeddings = self.children['embedding_agent'].generate_embeddings(relevant_data)
         if embeddings is None or embeddings.size == 0:
             return "Error generating embeddings."
 
@@ -68,12 +67,17 @@ class Agent:
 def create_agent():
     try:
         model_name = initialize_vertex_ai()
+        retrieval_agent = RetrievalAgent(name="retrieval_agent")
         agent_defect_analysis = Agent(
             model=model_name,
             name="agent_defect_analysis",
             description="This agent analyzes historical defect data and predicts future defect occurrences.",
             instruction=agent_instruction_prompt,
             generate_content_config=GenerationConfig(temperature=0.2),
+            children={
+                'embedding_agent': embedding_agent,
+                'retrieval_agent': retrieval_agent
+            }
         )
         return agent_defect_analysis
     except Exception as e:

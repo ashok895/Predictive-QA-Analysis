@@ -4,7 +4,7 @@ import faiss
 import pickle
 import logging
 import streamlit as st
-from utils import get_data_embeddings
+from embedding_agent import EmbeddingAgent
 
 # Initialize FAISS index
 dimension = 512  # The dimension of USE embeddings
@@ -23,6 +23,16 @@ def process_excel_data(excel_file_path):
     global index, historical_defect_data
     index = faiss.IndexFlatL2(dimension)  # Reset the index
     historical_defect_data = {}  # Reset historical data
+
+    embedding_agent = EmbeddingAgent(
+        model_url="https://tfhub.dev/google/universal-sentence-encoder/4",
+        name="embedding_agent",
+        description="This agent generates embeddings for the provided data.",
+        instruction="""
+            You are an embedding generator. Generate embeddings for the provided data.
+        """,
+        generate_content_config=None
+    )
 
     try:
         df_dict = pd.read_excel(excel_file_path, sheet_name=None)
@@ -66,7 +76,7 @@ def process_excel_data(excel_file_path):
                     return
 
                 # Add this sheet's data to the FAISS index
-                embeddings = get_data_embeddings(relevant_data)
+                embeddings = embedding_agent.generate_embeddings(relevant_data)
                 index.add(embeddings)  # Adding embeddings to the FAISS index
                 logging.info(f'Added embeddings for sheet: {sheet_name} to FAISS index')
                 historical_defect_data[sheet_name] = relevant_data
@@ -86,7 +96,17 @@ def retrieve_relevant_data(user_query, top_n=50):
     if not user_query or len(user_query.strip()) == 0:
         raise ValueError("User query is empty or invalid")
 
-    query_embedding = get_data_embeddings([user_query])
+    embedding_agent = EmbeddingAgent(
+        model_url="https://tfhub.dev/google/universal-sentence-encoder/4",
+        name="embedding_agent",
+        description="This agent generates embeddings for the provided data.",
+        instruction="""
+            You are an embedding generator. Generate embeddings for the provided data.
+        """,
+        generate_content_config=None
+    )
+
+    query_embedding = embedding_agent.generate_embeddings([user_query])
     distances, indices = index.search(query_embedding, top_n)
     relevant_data = []
     for i in range(top_n):
